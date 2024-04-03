@@ -4,145 +4,117 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-int main(int argc, char* argv[]){
-    if(argc != 4){
-        printf("Usage: %s <low> <high> <output file>\n", argv[0]);
-        return 1;
-    }
+typedef struct {
+    double avg;
+    int max;
+    int hiddenKeys;
+} Results;
 
-    // initialize variables from command line arguments and the populated array
-    int l = atoi(argv[1]);
-    int h = atoi(argv[2]);
-    int np = atoi(argv[3]);
-    int* fd = (int*)malloc(np * 2 * sizeof(int));
-    if(fd == NULL){
-        printf("Error: memory allocation failed\n");
-        return 1;
-    }
+Results breadthFirstSearch(int *numbers, int l, int np){
+    int* fd = (int*)malloc(np * 2 * sizeof(int)); // array to hold file descriptors for pipes
 
-    // allocate memory to an array of size l
-    int* numbers = (int*)malloc(l * sizeof(int));
-    if(numbers == NULL){
-        printf("Error: memory allocation failed\n");
-        return 1;
-    }
+    Results results = {0, -101, 0}; // Initialize results
 
-    // validate the amount of hidden keys to generate
-    if(h < 30 || h > 60){
-        printf("Error: high must be between 30 and 60\n");
-        return 1;
-    }
-    
-    // initialize the random number generator and populate the array with random numbers 1 to 100
-    srand(time(NULL));
-    for(int i = 0; i < l; i++){
-        numbers[i] = rand() % 100 + 1;
-    }
-    
-    // populate the array with hidden keys
-    int i = 0;
-    while(i < h){
-        int index = rand() % l;
-        // check if new index is already a hidden key
-        if(numbers[index] < 0) continue;
-
-        // populate the key with the hidden key
-        else{
-            numbers[index] = (rand() % 60 + 1) * -1;
-            i++;
-        }
-    }
-
-    // write the array to a file
-    FILE *file = fopen("numbers.txt", "w");
-    if(file == NULL){
-        printf("Error: file could not be opened\n");
-        free(numbers);
-        return 1;
-    }
-
-    for(int i = 0; i < l; i++){
-        fprintf(file, "%d\n", numbers[i]);
-    }
-    fclose(file);
-
-    // find the average, maximum value, and hidden keys using different processes
-    
-    // create the pipes for the child processes
-    for(int i = 0; i < np; i++){
-        if(pipe(fd + i * 2) == -1){
+    // Create the pipes for the child processes
+    for(int i = 0; i < np; i++) {
+        if(pipe(fd + i * 2) == -1) {
             printf("Error: pipe creation failed\n");
-            return 1;
+            exit(1); // Use exit here since we're not in main
         }
     }
 
-    // create the child processes
-    for(int i = 0; i < np; i++){
+    // Create the child processes
+    for(int i = 0; i < np; i++) {
         int startSeg = i * (l / np);
         int endSeg = (i + 1) * (l / np);
         if(i == np - 1) endSeg = l;
 
         pid_t pid = fork();
-        if(pid < 0){
+        if(pid < 0) {
             printf("Error: fork failed\n");
-            return 1;
+            exit(1); // Use exit here since we're not in main
         }
-        // child process calculates segment average
-        else if(pid == 0){
-            // close the read end of the pipe
-            close(fd[i*2]);
+        else if(pid == 0) {
+            close(fd[i*2]); // Child writes, so close the read end
 
-            // [0] = sum, [1] = max, [2] = hidden keys
-            int childReturn[3];
-
-            // calculate the sum of the segment
-            childReturn[0] = 0;
-            for(int j = startSeg; j < endSeg; j++){
-                childReturn[0] += numbers[j];
+            int childReturn[3] = {0, -101, 0};
+            for(int j = startSeg; j < endSeg; j++) {
+                childReturn[0] += numbers[j]; // Sum
+                if(numbers[j] > childReturn[1]) childReturn[1] = numbers[j]; // Max
+                if(numbers[j] < 0) childReturn[2]++; // Count hidden keys
             }
 
-            // calculate the maximum value of the segment
-            childReturn[1] = -101;
-            for(int j = startSeg; j < endSeg; j++){
-                if(numbers[j] > childReturn[1]) childReturn[1] = numbers[j];
-            }
-
-            // find the number of hidden keys of the segment
-            childReturn[2] = 0;
-            for(int j = startSeg; j < endSeg; j++){
-                if(numbers[j] < 0) childReturn[2]++;
-            }
-
-            // child process exits and writes the results to the pipe
-            write(fd[i*2 + 1], &childReturn, sizeof(childReturn));
-            return 1;
+            write(fd[i*2 + 1], &childReturn, sizeof(childReturn)); // Write results to the pipe
+            close(fd[i*2 + 1]); // Close the write end
+            exit(0); // Terminate child process
         }
-        // parent closes the write end of the pipe
-        else close(fd[i*2 + 1]);
+        else {
+            close(fd[i*2 + 1]); // Parent reads, so close the write end
+        }
     }
 
-    // parent process reads the results from the child processes
-    double avg = 0;
-    int max = -101;
-    int hiddenKeys = 0;
-    for(int i = 0; i < np; i++){
+    // Parent process reads the results from the child processes
+    for(int i = 0; i < np; i++) {
         int childReturn[3];
         read(fd[i*2], &childReturn, sizeof(childReturn));
-        avg += childReturn[0];
-        max = childReturn[1] > max ? childReturn[1] : max;
-        hiddenKeys += childReturn[2];
-        close(fd[i*2]);
+        results.avg += childReturn[0];
+        if(childReturn[1] > results.max) results.max = childReturn[1];
+        results.hiddenKeys += childReturn[2];
+        close(fd[i*2]); // Close the read end
     }
 
-    // wait for children to finish
-    while (wait(NULL) > 0);
+    while(wait(NULL) > 0); // Wait for all children to finish
 
-    avg /= l;
+    results.avg /= l; // Calculate the average
+    free(fd); 
+    return results;
+}
+
+int main(int argc, char* argv[]){
+    if(argc != 2){
+        printf("Usage: %s <low> <high> <output file>\n", argv[0]);
+        return 1;
+    }
+
+    // initialize variables from command line arguments 
+    int np = atoi(argv[1]);
+
+    // get the file integers
+    FILE *file;
+    int *numbers = malloc(sizeof(int)); // Dynamically allocate an array for one integer
+    int count = 0;
+    int temp;
+    int l; // for the length of the array later
+
+    file = fopen("numbers.txt", "r");
+    if (file == NULL) {
+        printf("Error opening file\n");
+        free(numbers); // Free the allocated memory before exiting
+        return 1;
+    }
+
+    while (fscanf(file, "%d", &temp) == 1) {
+        numbers[count] = temp;
+        count++;
+        int *new_numbers = realloc(numbers, (count + 1) * sizeof(int)); // Resize the array to hold one more integer
+        if (new_numbers == NULL) {
+            printf("Error reallocating memory\n");
+            free(numbers); // Free the original array before exiting
+            fclose(file);
+            return 1;
+        }
+        numbers = new_numbers;
+    }
+    l = count; 
+
+    fclose(file);
     
-    printf("Average: %f\nMaximum: %d\nNumber of Hidden Keys: %d\n", avg, max, hiddenKeys);
+    // find the average, maximum value, and hidden keys using breadth first search vs depth first search
+    Results BFS = breadthFirstSearch(numbers, l, np);
+
+    printf("Breadth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n", BFS.avg, BFS.max, BFS.hiddenKeys);
 
     // clean up, and return
     free(numbers);
-    printf("File created successfully\n");
     return 0;
 }
