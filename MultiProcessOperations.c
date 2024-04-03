@@ -64,6 +64,7 @@ int main(int argc, char* argv[]){
     for(int i = 0; i < l; i++){
         fprintf(file, "%d\n", numbers[i]);
     }
+    fclose(file);
 
     // find the average, maximum value, and hidden keys using different processes
     
@@ -138,10 +139,9 @@ int main(int argc, char* argv[]){
 
     avg /= l;
     
-    printf("Average: %f\n, Maximum: %d\n Number of Hidden Keys: %d\n", avg, max, hiddenKeys);
+    printf("Average: %f\nMaximum: %d\nNumber of Hidden Keys: %d\n", avg, max, hiddenKeys);
 
-    // close, clean up, and return
-    fclose(file);
+    // clean up, and return
     free(numbers);
     printf("File created successfully\n");
     return 0;
