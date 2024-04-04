@@ -3,6 +3,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 #include <string.h>
 
 typedef struct {
@@ -10,7 +11,7 @@ typedef struct {
     int max;
     int hiddenKeys;
     char message[1000]; 
-    char foundhidden[1000];
+    char foundhidden[10000];
 } Results;
 
 Results breadthFirstSearch(int *numbers, int l, int np){
@@ -77,7 +78,7 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
   Results resRead = {0, -100, 0, "", ""};
   int fd[np][2]; 
   pid_t parent = getpid();
-  int count = 0; 
+  clock_t start = clock();
   pid_t pid;
 
   for (int x = 0; x < np; x++){
@@ -101,12 +102,14 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
         strcat(resWrite.message, resRead.message);
         strcat(resWrite.foundhidden, resRead.foundhidden);
       }
-
-
-
       resWrite.avg /= l;
 
+      clock_t end = clock();
+
     FILE *file = fopen("output.txt", "w");
+    fprintf(file, "DEPTH FIRST SEARCH RESULTS\n");
+    fprintf(file, "List of size L = %d\n", l);
+    fprintf(file, "Total time to finish: %f seconds\n\n", (double)(end-start)/CLOCKS_PER_SEC);
     fprintf(file, "%s", resWrite.message);
     fprintf(file, "Max = %d, Avg = %f, Number of hidden keys = %d\n\n", resWrite.max, resWrite.avg, resWrite.hiddenKeys);
     fprintf(file, "%s", resWrite.foundhidden);
@@ -117,14 +120,14 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
 
     }
     else if (i == np){
-        exit(0); 
+        exit(i); 
     }
     else if (pid > 0 && i != np){
-        exit(0); 
+        exit(i+1); 
     }
 
     else if (pid == 0) {
-        snprintf(resWrite.message, sizeof(resWrite.message), "Hi I'm Process %d and my parent is %d\n", getpid(), getppid()); 
+        snprintf(resWrite.message, sizeof(resWrite.message), "Hi I'm Process %d with return arg %d and my parent is %d\n", getpid(), i + 1, getppid()); 
       int start = i * segSize;
       int end = (i + 1) * segSize;
       char temp[100]; 
@@ -140,7 +143,7 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
         }
         if (numbers[j] < 0) {
           resWrite.hiddenKeys++;
-          snprintf(temp, sizeof(temp), "Hi I'm Process %d and I found hidden key in position numbers[%d]\n", getpid(), j+1); 
+          snprintf(temp, sizeof(temp), "Hi I'm Process %d with return arg %d and I found hidden key in position numbers[%d]\n", getpid(), i +1, j+1); 
           strcat(resWrite.foundhidden, temp);
         }
       }
