@@ -3,17 +3,20 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <string.h>
 
 typedef struct {
     double avg;
     int max;
     int hiddenKeys;
+    char message[1000]; 
+    char foundhidden[1000];
 } Results;
 
 Results breadthFirstSearch(int *numbers, int l, int np){
     int* fd = (int*)malloc(np * 2 * sizeof(int)); // array to hold file descriptors for pipes
 
-    Results results = {0, -101, 0}; // Initialize results
+    Results results = {0, -101, 0, "", ""}; // Initialize results
 
     // Create the pipes for the child processes
     for(int i = 0; i < np; i++) {
@@ -71,7 +74,7 @@ Results breadthFirstSearch(int *numbers, int l, int np){
 }
 
 void depthFirstSearch(int *numbers, int segSize, int np, int l) {
-  Results resRead = {0, -100, 0};
+  Results resRead = {0, -100, 0, "", ""};
   int fd[np][2]; 
   pid_t parent = getpid();
   int count = 0; 
@@ -82,7 +85,7 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
   }
 
   for (int i = 0; i <= np; i++) {
-    Results resWrite = {0, -101, 0};
+    Results resWrite = {0, -101, 0, "", ""};
     
     pid = fork(); 
 
@@ -95,11 +98,23 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
         if (resRead.max > resWrite.max) {
           resWrite.max = resRead.max;
         }
+        strcat(resWrite.message, resRead.message);
+        strcat(resWrite.foundhidden, resRead.foundhidden);
       }
+
+
+
       resWrite.avg /= l;
 
-      printf("Depth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n\n", resWrite.avg, resWrite.max, resWrite.hiddenKeys);
+    FILE *file = fopen("output.txt", "w");
+    fprintf(file, "%s", resWrite.message);
+    fprintf(file, "Max = %d, Avg = %f, Number of hidden keys = %d\n\n", resWrite.max, resWrite.avg, resWrite.hiddenKeys);
+    fprintf(file, "%s", resWrite.foundhidden);
+    
+    fclose(file);
+      
       exit(0);
+
     }
     else if (i == np){
         exit(0); 
@@ -109,8 +124,10 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
     }
 
     else if (pid == 0) {
+        snprintf(resWrite.message, sizeof(resWrite.message), "Hi I'm Process %d and my parent is %d\n", getpid(), getppid()); 
       int start = i * segSize;
       int end = (i + 1) * segSize;
+      char temp[100]; 
       if (i == np - 1) {
         end = l;
       }
@@ -123,6 +140,8 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
         }
         if (numbers[j] < 0) {
           resWrite.hiddenKeys++;
+          snprintf(temp, sizeof(temp), "Hi I'm Process %d and I found hidden key in position numbers[%d]\n", getpid(), j+1); 
+          strcat(resWrite.foundhidden, temp);
         }
       }
 
