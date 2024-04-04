@@ -70,6 +70,162 @@ Results breadthFirstSearch(int *numbers, int l, int np){
     return results;
 }
 
+void dfs(int *numbers, int segSize, int np, int l){
+    Results resRead = {0, -100, 0};
+    Results resWrite = {0, -101, 0};
+    Results temp = {0, 0, 0};
+    int* fd = (int*)malloc(np * 2 * sizeof(int));
+    pid_t parent = getpid(); 
+    for(int i = 0; i <= np; i++){
+        if(i == np){
+            exit(0);
+        }
+        pipe(fd + i * 2);
+        pid_t pid = fork();
+    
+        // parent process
+        if(parent == getpid()){
+            waitpid(pid, NULL, 0);
+            read(fd[0], &resRead, sizeof(resRead));
+            printf("parent %d\n", i); 
+            resWrite.hiddenKeys += resRead.hiddenKeys;
+            resWrite.avg += resRead.avg;
+            if(resRead.max > resWrite.max){
+                resWrite.max = resRead.max;
+            }
+            resWrite.avg /= l;
+        
+            printf("Depth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n\n", resWrite.avg, resWrite.max, resWrite.hiddenKeys);
+            exit(0);
+        }
+        // child process
+        else if(pid > 0){
+            waitpid(pid, NULL, 0);
+            read(fd[(i)*2], &resRead, sizeof(resRead)); // read from grandchild (2, 3)
+            read(fd[(i - 1) * 2], &temp, sizeof(temp));
+            printf("child %d\n", i); 
+            resWrite.avg += resRead.avg;
+            printf("thing%f\n", resWrite.avg); 
+            if(resRead.max > resWrite.max){
+                resWrite.max = resRead.max;
+            }
+            resWrite.hiddenKeys = resRead.hiddenKeys;
+            printf("%d\n", temp.hiddenKeys);
+            write(fd[(i-1)*2+1], &resWrite, sizeof(resWrite)); // write to parent (0,1)
+            exit(0);
+        }
+        // grandchild process
+        else{
+            int start = i * segSize;
+            int end = (i + 1) * segSize;
+            if(i == np - 1){
+                end = l;
+            }
+
+            // analyze the array
+            for(int j = start; j < end; j++){
+                resWrite.avg += numbers[j];
+                if(numbers[j] > resWrite.max){
+                    resWrite.max = numbers[j];
+                }
+                if(numbers[j] < 0){
+                    resWrite.hiddenKeys++;
+                }
+            }
+            printf("gchild %d\n", i); 
+
+            // write to the pipe (child to parent)
+            write(fd[(i+1)*2-1], &resWrite, sizeof(resWrite)); // [2, 3]
+
+        }
+    }
+}
+
+void depthFirstSearch(int *numbers, int segSize, int depth, int np){
+    pid_t pid;
+    if(depth == np){
+        // analyze the segment
+        Results res = {0, -101, 0};
+        for(int i = 0; i < segSize; i++){
+            res.avg += numbers[i];
+            if(numbers[i] > res.max){
+                res.max = numbers[i];
+            }
+            if(numbers[i] < 0){
+                res.hiddenKeys++;
+            }
+        }
+
+        // write(fd[1], &res, sizeof(res));
+        // close(fd[1]);
+        exit(0);
+    }
+    int* fd = (int*)malloc(2 * sizeof(int));
+    pipe(fd);
+    pid = fork();
+    int status;
+    
+
+    Results res;
+    // if (depth == 0 && pid == 0){
+    //     firstchild = getpid();
+    // }
+    // if (pid == parent){
+    //     printf("bruh"); 
+    //     parent = getpid();
+    // }
+
+
+    if(pid < 0){
+        // error
+        printf("Error: fork failed\n");
+        exit(1);
+    }
+    else if(depth != np && pid == 0){
+        pid_t childPID = getpid();
+        pid_t parentPID = getppid();
+        // print out
+
+        printf("Child %d: PID: %d, Parent PID: %d\n", depth+1, childPID, parentPID);
+        depthFirstSearch(numbers + segSize, segSize, depth + 1, np);
+        // read the read end
+        waitpid(pid, &status, 0);
+        read(fd[0], &res, sizeof(res));
+        // close the read end
+        close(fd[0]);
+        // analyze the segment
+        for(int i = 0; i < segSize; i++){
+            res.avg += numbers[i];
+            if(numbers[i] > res.max){
+                res.max = numbers[i];
+            }
+            if(numbers[i] < 0){
+                res.hiddenKeys++;
+            }
+        }
+
+        // write to the pipe
+        write(fd[1], &res, sizeof(res));
+        // close the write end
+        close(fd[1]);
+        // exit the child process
+        exit(0);
+    }
+
+    // parent process
+    // wait for all child processes to finish
+    printf("hi"); 
+    waitpid(pid, &status, 0);
+    read(fd[0], &res, sizeof(res));
+    // close the read end
+    close(fd[0]);
+
+    // results
+    res.avg /= np;
+    printf("Depth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n", res.avg, res.max, res.hiddenKeys);
+    exit(0);
+}
+
 int main(int argc, char* argv[]){
     if(argc != 2){
         printf("Usage: %s <low> <high> <output file>\n", argv[0]);
@@ -110,9 +266,10 @@ int main(int argc, char* argv[]){
     fclose(file);
     
     // find the average, maximum value, and hidden keys using breadth first search vs depth first search
-    Results BFS = breadthFirstSearch(numbers, l, np);
+    // Results BFS = breadthFirstSearch(numbers, l, np);
+    dfs(numbers, l / np, np, l);
 
-    printf("Breadth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n", BFS.avg, BFS.max, BFS.hiddenKeys);
+    // printf("Breadth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n", BFS.avg, BFS.max, BFS.hiddenKeys);
 
     // clean up, and return
     free(numbers);
