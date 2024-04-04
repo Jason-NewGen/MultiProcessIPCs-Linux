@@ -70,6 +70,72 @@ Results breadthFirstSearch(int *numbers, int l, int np){
     return results;
 }
 
+void depthFirstSearch(int *numbers, int segSize, int np, int l) {
+  Results resRead = {0, -100, 0};
+  int fd[np][2]; 
+  pid_t parent = getpid();
+  int count = 0; 
+  pid_t pid;
+
+  for (int x = 0; x < np; x++){
+    pipe(fd[x]); 
+  }
+
+  for (int i = 0; i <= np; i++) {
+    Results resWrite = {0, -101, 0};
+    
+    pid = fork(); 
+
+    // parent process
+    if (parent == getpid()) {;
+      for (int j = 0; j < np ; j++) {;
+        read(fd[j][0], &resRead, sizeof(resRead));
+        resWrite.hiddenKeys += resRead.hiddenKeys;
+        resWrite.avg += resRead.avg;
+        if (resRead.max > resWrite.max) {
+          resWrite.max = resRead.max;
+        }
+      }
+      resWrite.avg /= l;
+
+      printf("Depth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n\n", resWrite.avg, resWrite.max, resWrite.hiddenKeys);
+      exit(0);
+    }
+    else if (i == np){
+        exit(0); 
+    }
+    else if (pid > 0 && i != np){
+        exit(0); 
+    }
+
+    else if (pid == 0) {
+      int start = i * segSize;
+      int end = (i + 1) * segSize;
+      if (i == np - 1) {
+        end = l;
+      }
+
+      // analyze the array
+      for (int j = start; j < end; j++) {
+        resWrite.avg += numbers[j];
+        if (numbers[j] > resWrite.max) {
+          resWrite.max = numbers[j];
+        }
+        if (numbers[j] < 0) {
+          resWrite.hiddenKeys++;
+        }
+      }
+
+      // write to the pipe (child to parent)
+      write(fd[i][1], &resWrite, sizeof(resWrite));
+      close(fd[i][1]); 
+    }
+  }
+
+}
+
+
+
 int main(int argc, char* argv[]){
     if(argc != 2){
         printf("Usage: %s <low> <high> <output file>\n", argv[0]);
@@ -108,13 +174,10 @@ int main(int argc, char* argv[]){
     l = count; 
 
     fclose(file);
+
+    int fd[np][2]; 
     
-    // find the average, maximum value, and hidden keys using breadth first search vs depth first search
-    Results BFS = breadthFirstSearch(numbers, l, np);
-
-    printf("Breadth First Search Results:\nAverage: %f\nMax: %d\nHidden Keys: %d\n", BFS.avg, BFS.max, BFS.hiddenKeys);
-
-    // clean up, and return
+    depthFirstSearch(numbers, l / np, np, l);
     free(numbers);
     return 0;
 }
