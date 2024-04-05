@@ -3,7 +3,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <sys/time.h>
 #include <string.h>
 
 typedef struct {
@@ -11,11 +10,13 @@ typedef struct {
     int max;
     int hiddenKeys;
     char message[1000]; 
-    char foundhidden[10000];
+    char foundhidden[1000];
 } Results;
 
-Results breadthFirstSearch(int *numbers, int l, int np){
+void breadthFirstSearch(int *numbers, int l, int np){
+    printf("HI"); 
     int* fd = (int*)malloc(np * 2 * sizeof(int)); // array to hold file descriptors for pipes
+    clock_t start = clock();
 
     Results results = {0, -101, 0, "", ""}; // Initialize results
 
@@ -39,18 +40,24 @@ Results breadthFirstSearch(int *numbers, int l, int np){
             exit(1); // Use exit here since we're not in main
         }
         else if(pid == 0) {
+          Results childReturn = {0, -101, 0, ""};
+           snprintf(childReturn.message, sizeof(childReturn.message), "Hi I'm Process %d with return arg %d and my parent is %d\n", getpid(), i + 1, getppid()); 
             close(fd[i*2]); // Child writes, so close the read end
+            char temp[100]; 
 
-            int childReturn[3] = {0, -101, 0};
+          
             for(int j = startSeg; j < endSeg; j++) {
-                childReturn[0] += numbers[j]; // Sum
-                if(numbers[j] > childReturn[1]) childReturn[1] = numbers[j]; // Max
-                if(numbers[j] < 0) childReturn[2]++; // Count hidden keys
+                childReturn.avg += numbers[j]; // Sum
+                if(numbers[j] > childReturn.max) childReturn.max = numbers[j]; // Max
+                if(numbers[j] < 0) childReturn.hiddenKeys++; // Count hidden keys
+                snprintf(temp, sizeof(temp), "Hi I'm Process %d with return arg %d and I found hidden key in position numbers[%d]\n", getpid(), i +1, j+1); 
+                strcat(childReturn.foundhidden, temp);
             }
 
             write(fd[i*2 + 1], &childReturn, sizeof(childReturn)); // Write results to the pipe
+
             close(fd[i*2 + 1]); // Close the write end
-            exit(0); // Terminate child process
+            exit(i+1); // Terminate child process
         }
         else {
             close(fd[i*2 + 1]); // Parent reads, so close the write end
@@ -59,19 +66,30 @@ Results breadthFirstSearch(int *numbers, int l, int np){
 
     // Parent process reads the results from the child processes
     for(int i = 0; i < np; i++) {
-        int childReturn[3];
+        Results childReturn = {0, -101, 0, ""}; 
         read(fd[i*2], &childReturn, sizeof(childReturn));
-        results.avg += childReturn[0];
-        if(childReturn[1] > results.max) results.max = childReturn[1];
-        results.hiddenKeys += childReturn[2];
+        results.avg += childReturn.avg;
+        if(childReturn.max > results.max) results.max = childReturn.max;
+        results.hiddenKeys += childReturn.hiddenKeys;
+        strcat(results.message, childReturn.message);
+        strcat(results.foundhidden, childReturn.foundhidden);
+
         close(fd[i*2]); // Close the read end
     }
 
     while(wait(NULL) > 0); // Wait for all children to finish
-
     results.avg /= l; // Calculate the average
     free(fd); 
-    return results;
+    clock_t end = clock();
+    FILE *file = fopen("outputbfs.txt", "w");
+    fprintf(file, "BREADTH FIRST SEARCH RESULTS\n");
+    fprintf(file, "List of size L = %d\n", l);
+    fprintf(file, "Total time to finish: %f seconds\n\n", (double)(end-start)/CLOCKS_PER_SEC);
+    fprintf(file, "%s", results.message);
+    fprintf(file, "Max = %d, Avg = %f, Number of hidden keys = %d\n\n", results.max, results.avg, results.hiddenKeys);
+    fprintf(file, "%s", results.foundhidden);
+    fclose(file);
+    
 }
 
 void depthFirstSearch(int *numbers, int segSize, int np, int l) {
@@ -106,7 +124,7 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
 
       clock_t end = clock();
 
-    FILE *file = fopen("output.txt", "w");
+    FILE *file = fopen("outputdfs.txt", "w");
     fprintf(file, "DEPTH FIRST SEARCH RESULTS\n");
     fprintf(file, "List of size L = %d\n", l);
     fprintf(file, "Total time to finish: %f seconds\n\n", (double)(end-start)/CLOCKS_PER_SEC);
@@ -157,7 +175,6 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
 }
 
 
-
 int main(int argc, char* argv[]){
     if(argc != 2){
         printf("Usage: %s <low> <high> <output file>\n", argv[0]);
@@ -198,6 +215,7 @@ int main(int argc, char* argv[]){
     fclose(file);
 
     int fd[np][2]; 
+        breadthFirstSearch(numbers, l, np); 
     
     depthFirstSearch(numbers, l / np, np, l);
     free(numbers);
