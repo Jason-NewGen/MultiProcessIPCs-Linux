@@ -13,5 +13,8 @@ run:
 	./getAvgMaxH 5
 
 clean:
-	rm makelist
-	rm numbers.txt
+	rm -f makelist
+	rm -f getAvgMaxH
+	rm -f numbers.txt
+	rm -f outputbfs.txt
+	rm -f outputdfs.txt
