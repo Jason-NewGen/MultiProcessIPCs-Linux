@@ -20,7 +20,7 @@ void breadthFirstSearch(int *numbers, int l, int np){
     Results results = {0, -100, 0, "", ""}; // Initialize results
     Results childReturn = {0, -101, 0, "", ""}; // Initialize results
 
-    // Create the pipes for the child processes
+    // For the child processes, created the pipes.
     for(int i = 0; i < np; i++) {
         if(pipe(fd[i]) == -1) {
             printf("Error: pipe creation failed\n");
