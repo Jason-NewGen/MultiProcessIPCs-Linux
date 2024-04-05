@@ -10,19 +10,19 @@ typedef struct {
     int max;
     int hiddenKeys;
     char message[1000]; 
-    char foundhidden[1000];
+    char foundhidden[10000];
 } Results;
 
 void breadthFirstSearch(int *numbers, int l, int np){
-    printf("HI"); 
-    int* fd = (int*)malloc(np * 2 * sizeof(int)); // array to hold file descriptors for pipes
+    pid_t pid;
+    int fd[np][2]; // array to hold file descriptors for pipes
     clock_t start = clock();
-
-    Results results = {0, -101, 0, "", ""}; // Initialize results
+    Results results = {0, -100, 0, "", ""}; // Initialize results
+    Results childReturn = {0, -101, 0, "", ""}; // Initialize results
 
     // Create the pipes for the child processes
     for(int i = 0; i < np; i++) {
-        if(pipe(fd + i * 2) == -1) {
+        if(pipe(fd[i]) == -1) {
             printf("Error: pipe creation failed\n");
             exit(1); // Use exit here since we're not in main
         }
@@ -34,52 +34,47 @@ void breadthFirstSearch(int *numbers, int l, int np){
         int endSeg = (i + 1) * (l / np);
         if(i == np - 1) endSeg = l;
 
-        pid_t pid = fork();
+        pid = fork();
         if(pid < 0) {
             printf("Error: fork failed\n");
             exit(1); // Use exit here since we're not in main
         }
         else if(pid == 0) {
-          Results childReturn = {0, -101, 0, ""};
-           snprintf(childReturn.message, sizeof(childReturn.message), "Hi I'm Process %d with return arg %d and my parent is %d\n", getpid(), i + 1, getppid()); 
-            close(fd[i*2]); // Child writes, so close the read end
+            snprintf(childReturn.message, sizeof(childReturn.message), "Hi I'm Process %d with return arg %d and my parent is %d\n", getpid(), i + 1, getppid()); 
             char temp[100]; 
 
-          
             for(int j = startSeg; j < endSeg; j++) {
                 childReturn.avg += numbers[j]; // Sum
                 if(numbers[j] > childReturn.max) childReturn.max = numbers[j]; // Max
-                if(numbers[j] < 0) childReturn.hiddenKeys++; // Count hidden keys
-                snprintf(temp, sizeof(temp), "Hi I'm Process %d with return arg %d and I found hidden key in position numbers[%d]\n", getpid(), i +1, j+1); 
-                strcat(childReturn.foundhidden, temp);
+                if(numbers[j] < 0){
+                    childReturn.hiddenKeys++; // Count hidden keys
+                    snprintf(temp, sizeof(temp), "Hi I'm Process %d with return arg %d and I found hidden key in position numbers[%d]\n", getpid(), i +1, j+1); 
+                    strcat(childReturn.foundhidden, temp);
+                }
             }
-
-            write(fd[i*2 + 1], &childReturn, sizeof(childReturn)); // Write results to the pipe
-
-            close(fd[i*2 + 1]); // Close the write end
+            write(fd[i][1], &childReturn, sizeof(childReturn)); // Write results to the pipe
+            close(fd[i][1]); // Child writes, so close the read end
             exit(i+1); // Terminate child process
         }
         else {
-            close(fd[i*2 + 1]); // Parent reads, so close the write end
+            close(fd[i][1]); // Parent reads, so close the write end
         }
     }
 
-    // Parent process reads the results from the child processes
+    while(wait(NULL) > 0); // Wait for all children to finish
     for(int i = 0; i < np; i++) {
-        Results childReturn = {0, -101, 0, ""}; 
-        read(fd[i*2], &childReturn, sizeof(childReturn));
+        Results childReturn = {0, -101, 0, "", ""}; 
+        read(fd[i][0], &childReturn, sizeof(childReturn));
         results.avg += childReturn.avg;
         if(childReturn.max > results.max) results.max = childReturn.max;
         results.hiddenKeys += childReturn.hiddenKeys;
         strcat(results.message, childReturn.message);
         strcat(results.foundhidden, childReturn.foundhidden);
 
-        close(fd[i*2]); // Close the read end
+        close(fd[i][0]); // Close the read end
     }
-
-    while(wait(NULL) > 0); // Wait for all children to finish
+    // Parent process reads the results from the child processes
     results.avg /= l; // Calculate the average
-    free(fd); 
     clock_t end = clock();
     FILE *file = fopen("outputbfs.txt", "w");
     fprintf(file, "BREADTH FIRST SEARCH RESULTS\n");
@@ -110,7 +105,7 @@ void depthFirstSearch(int *numbers, int segSize, int np, int l) {
 
     // parent process
     if (parent == getpid()) {;
-      for (int j = 0; j < np ; j++) {;
+      for (int j = 0; j < np ; j++){
         read(fd[j][0], &resRead, sizeof(resRead));
         resWrite.hiddenKeys += resRead.hiddenKeys;
         resWrite.avg += resRead.avg;
@@ -215,8 +210,8 @@ int main(int argc, char* argv[]){
     fclose(file);
 
     int fd[np][2]; 
-        breadthFirstSearch(numbers, l, np); 
-    
+
+    breadthFirstSearch(numbers, l, np);
     depthFirstSearch(numbers, l / np, np, l);
     free(numbers);
     return 0;
