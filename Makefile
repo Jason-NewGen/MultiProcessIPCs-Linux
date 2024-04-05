@@ -1,6 +1,6 @@
 # Usage:
 # make			# compile C programs to binary
-# make run			# run the output file
+# make run		# run the output file
 # make clean	# remove compiled binaries and output files
 
 
