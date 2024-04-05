@@ -7,7 +7,7 @@
 
 int main(int argc, char* argv[]){
     if(argc != 3){
-        printf("Usage: %s <low> <high> <output file>\n", argv[0]);
+        printf("Usage: %s <low> <high> \n", argv[0]);
         return 1;
     }
 
